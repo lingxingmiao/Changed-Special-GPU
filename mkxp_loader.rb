@@ -168,9 +168,25 @@ end
 dsh_log("已启用 Shift → Input::A 映射")
 
 # ---------------------------------------------------------------------------
-# 4) 帧率日志 + F11/F12 返回标题画面
+# 4) 帧率日志 + 返回标题画面
+#
+#    mkxp-z 把 F12 保留给引擎的"重置"，而它的重置路径对本作是致命的（会抛
+#    Reset 直接结束进程）；把 enableReset 关掉后，F12 又会被引擎整个吞掉，
+#    脚本根本收不到。所以主用普通按键组合 Ctrl+R（引擎不会拦），
+#    F11/F12 一并尝试（有些环境能收到）。任一个生效即可。
 # ---------------------------------------------------------------------------
-DSH_BACK_KEYS = [0x7A, 0x7B]      # F11, F12
+DSH_BACK_FKEYS  = [0x7A, 0x7B]      # F11, F12（可能被引擎吞掉）
+DSH_BACK_VK_R   = 0x52              # R
+DSH_BACK_VK_CTRL = 0x11             # Ctrl
+
+def dsh_back_key_down?
+  begin
+    return "F11/F12" if DSH_BACK_FKEYS.any? { |k| Input.pressex?(k) }
+    return "Ctrl+R" if Input.pressex?(DSH_BACK_VK_CTRL) && Input.pressex?(DSH_BACK_VK_R)
+  rescue Exception
+  end
+  return nil
+end
 
 class << Graphics
   unless method_defined?(:__dsh_update_g)
@@ -179,12 +195,13 @@ class << Graphics
   def update(*args)
     __dsh_update_g(*args)
 
-    back = begin
-      DSH_BACK_KEYS.any? { |k| Input.pressex?(k) }
+    hit = begin
+      dsh_back_key_down?
     rescue Exception
-      false
+      nil
     end
-    if back && !$__dsh_back_prev
+    if hit && !$__dsh_back_prev
+      dsh_log("检测到返回键（#{hit}）")
       begin
         if defined?($scene) && $scene && $scene.class.to_s != "Scene_Title"
           dsh_log("返回标题画面（当前 #{$scene.class}）")
@@ -194,7 +211,7 @@ class << Graphics
         dsh_log("返回标题失败 #{e.class}: #{e.message}")
       end
     end
-    $__dsh_back_prev = back
+    $__dsh_back_prev = (hit ? true : false)
 
     $__dsh_frames = ($__dsh_frames || 0) + 1
     t = Time.now.to_f
