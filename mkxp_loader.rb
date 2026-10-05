@@ -2,7 +2,7 @@
 #  mkxp-z RGSS2 (RPG Maker VX) 兼容加载器
 #
 #  作用：让一批老国产 RGSS2 游戏能在 mkxp-z 上正常运行（从而吃到 GPU 渲染）。
-#  它不修改任何游戏文件，全部修复都在运行时内存里完成。
+#  它不修改任何游戏文件，所有修复都在运行时内存里完成。
 #
 #  解决的四个问题：
 #   1) mkxp-z 自身的 Data/Scripts.rvdata 加载流程对这类游戏不生效
@@ -17,7 +17,10 @@
 #        （没有 raw_data 时回退 get_pixel/set_pixel），存档数据结构不变
 #   4) mkxp-z 里 Input::A 默认没有绑到 Shift，而 RGSS 原版的 A 键（疾跑、
 #      对话瞬间显示、菜单快捷键）就是 Shift → 在引擎层把 Shift 映射成 Input::A
-#      另外把引擎的 F12（mkxp-z 会直接抛 Reset 关掉游戏）接住，改成"回标题画面"
+#
+#  返回标题画面：F11 / F12。mkxp-z 自带的重置（F12）会抛 Reset 直接结束进程
+#  （它的重置流程假设脚本由它自己加载，对本作不成立），所以 mkxp.json 里把
+#  enableReset 关掉，改由本加载器自己处理这个键 → 只切场景，不重启引擎。
 #
 #  用法：把这个文件和 mkxp.json 放进游戏目录（与 Game.exe 同级），
 #        启动 mkxp-z.exe 即可。日志写在 dsh_log.txt。
@@ -165,8 +168,10 @@ end
 dsh_log("已启用 Shift → Input::A 映射")
 
 # ---------------------------------------------------------------------------
-# 4) 帧率日志 + F12 返回标题画面
+# 4) 帧率日志 + F11/F12 返回标题画面
 # ---------------------------------------------------------------------------
+DSH_BACK_KEYS = [0x7A, 0x7B]      # F11, F12
+
 class << Graphics
   unless method_defined?(:__dsh_update_g)
     alias_method :__dsh_update_g, :update
@@ -174,22 +179,22 @@ class << Graphics
   def update(*args)
     __dsh_update_g(*args)
 
-    f12 = begin
-      Input.pressex?(0x7B)
+    back = begin
+      DSH_BACK_KEYS.any? { |k| Input.pressex?(k) }
     rescue Exception
       false
     end
-    if f12 && !$__dsh_f12_prev
+    if back && !$__dsh_back_prev
       begin
         if defined?($scene) && $scene && $scene.class.to_s != "Scene_Title"
-          dsh_log("F12 → 返回标题画面（当前 #{$scene.class}）")
+          dsh_log("返回标题画面（当前 #{$scene.class}）")
           $scene = Scene_Title.new
         end
       rescue Exception => e
-        dsh_log("F12 处理失败 #{e.class}: #{e.message}")
+        dsh_log("返回标题失败 #{e.class}: #{e.message}")
       end
     end
-    $__dsh_f12_prev = f12
+    $__dsh_back_prev = back
 
     $__dsh_frames = ($__dsh_frames || 0) + 1
     t = Time.now.to_f
@@ -209,7 +214,7 @@ at_exit do
 end
 
 # ---------------------------------------------------------------------------
-# 5) 脚本加载（可重复执行：F12/Reset → 重新加载 → 回到标题画面）
+# 5) 脚本加载
 # ---------------------------------------------------------------------------
 def dsh_script_path
   path = "Data/Scripts.rvdata"
@@ -230,7 +235,9 @@ def dsh_load_scripts
   dsh_log("读取 #{path} 成功，#{arr.size} 个脚本")
   n_ok = 0
   arr.each do |e|
-    id = e[0]; name = (e[1].to_s rescue "?"); code = e[2]
+    id = e[0]
+    name = (e[1].to_s rescue "?")
+    code = e[2]
     next if code.nil? || code.to_s.empty?
     begin
       src = Zlib::Inflate.inflate(code)
@@ -242,10 +249,7 @@ def dsh_load_scripts
     begin
       eval(src, TOPLEVEL_BINDING, "#{id}:#{name}")
       n_ok += 1
-    rescue SystemExit
-      raise
     rescue Exception => ex
-      raise if ex.class.to_s == "Reset"     # mkxp-z 的 F12 重置信号，交给外层
       dsh_log("脚本出错 #{id}:#{name} #{ex.class}: #{ex.message}")
       ((ex.backtrace rescue nil) || [])[0, 6].each { |l| dsh_log("      #{l}") }
     end
@@ -254,30 +258,9 @@ def dsh_load_scripts
   dsh_log("脚本加载完成，成功 #{n_ok} 个")
 end
 
-loop do
-  begin
-    dsh_load_scripts
-    break
-  rescue Exception => e
-    if e.is_a?(SystemExit) || e.class.to_s == "Reset"
-      dsh_log("收到重置信号（#{e.class}，F12）→ 清理场景并重新加载脚本，回到标题画面")
-      begin
-        if defined?($scene) && $scene
-          $scene.terminate if $scene.respond_to?(:terminate)
-          $scene.dispose   if $scene.respond_to?(:dispose)
-        end
-      rescue Exception
-      end
-      begin
-        $scene = nil
-        Graphics.transition(0)
-      rescue Exception
-      end
-      next
-    else
-      dsh_log("加载器失败: #{e.class}: #{e.message}")
-      ((e.backtrace rescue nil) || [])[0, 10].each { |l| dsh_log("      #{l}") }
-      break
-    end
-  end
+begin
+  dsh_load_scripts
+rescue Exception => e
+  dsh_log("加载器失败: #{e.class}: #{e.message}")
+  ((e.backtrace rescue nil) || [])[0, 10].each { |l| dsh_log("      #{l}") }
 end

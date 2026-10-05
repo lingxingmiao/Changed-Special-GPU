@@ -6,7 +6,7 @@
   "defScreenW": 544,
   "defScreenH": 416,
   "enableBlitting": true,
-  "enableReset": true,
+  "enableReset": false,
   "displayFPS": true,
   "printFPS": false,
   "customScript": "mkxp_loader.rb"

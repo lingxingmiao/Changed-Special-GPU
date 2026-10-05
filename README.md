@@ -19,7 +19,9 @@ mkxp-z 是 RGSS 的重写实现（RPG Maker XP / VX / VX Ace），性能和兼�
 | 3 | 「截图存档」类脚本用 `Win32API + RtlMoveMemory` 按 Ruby 1.8 的对象布局（`object_id * 2 + 16`）直接读写 Bitmap 内存 | Ruby 3.x 里 `object_id` 已不是地址 → 往野地址写数据 → **读档必段错误** | `eval` 后检测并覆盖 `Bitmap#_dump` / `Bitmap._load`，改走 `raw_data`（没有该扩展时回退 `get_pixel`/`set_pixel`），**存档数据结构不变** |
 | 4 | mkxp-z 里 `Input::A` 默认没绑到 Shift | 原版里 A 键=Shift（疾跑、对话瞬间显示、菜单快捷键）全部失灵 | 在引擎层把物理 Shift 映射成 `Input::A`（`press?` / `trigger?` / `repeat?`） |
 
-另外还接住了 mkxp-z 的引擎级 `F12`（它会直接抛 `Reset` 把游戏关掉），改成 **F12 = 回到标题画面**。
+另外，mkxp-z 引擎级的 `F12`（"重置"）在这类游戏上是**致命的**：它会抛 `Reset` 直接结束进程
+（它的重置流程假设脚本由 mkxp-z 自己加载，对本作不成立），所以配置里把 `enableReset` 关掉，
+改由加载器自己处理这个键 → **F11 / F12 = 回到标题画面**（只切场景，不重启引擎，也不会退出）。
 
 ## 效果（《Changed-special》实测）
 
@@ -57,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -GameDir "D:\Games\YourVX
 | 键 | 作用 |
 |---|---|
 | `Shift` | 原版的 A 键（疾跑、对话瞬间显示、菜单快捷键） |
-| `F12` | 回到标题画面（原版行为；按住不放会连续重载几次，按一下即可） |
+| `F11` / `F12` | 回到标题画面（原版是 F12；只切场景，不会退出游戏） |
 | `F1` | mkxp-z 自带的设置菜单（缩放/滤镜/按键绑定等） |
 | `F2` | mkxp-z 自带的帧率显示开关 |
 | `Alt+Enter` | 全屏（GPU 缩放，几乎不吃 CPU） |
@@ -83,7 +85,8 @@ RGSS 里 **`Graphics.update` 同时是渲染和逻辑 tick**，所以"解锁帧�
 
 - **旧存档的缩略图**外观可能不对：老存档里的缩略图像素是原版播放器的内存布局（自下而上/通道顺序不同），
   用 mkxp 解出来会翻或偏色。在 mkxp 里**重新存一次档**即可恢复正常（不影响存档内容与游戏本身）。
-- `F12` 触发的是"重新加载脚本"，会有约 0.2 秒的卡顿与少量资源残留。
+- 请**不要**把 `mkxp.json` 里的 `enableReset` 改回 `true`：mkxp-z 的引擎重置在本作上会直接结束游戏
+  （回归标题画面由加载器自己负责，见上文）。
 
 ## 许可与声明
 
