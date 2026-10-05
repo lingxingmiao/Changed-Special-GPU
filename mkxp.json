@@ -1,0 +1,13 @@
+{
+  "rgssVersion": 2,
+  "vsync": false,
+  "syncToRefreshrate": false,
+  "frameSkip": false,
+  "defScreenW": 544,
+  "defScreenH": 416,
+  "enableBlitting": true,
+  "enableReset": true,
+  "displayFPS": true,
+  "printFPS": false,
+  "customScript": "mkxp_loader.rb"
+}

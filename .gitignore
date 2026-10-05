@@ -1,0 +1,14 @@
+# 运行日志 / 临时文件
+dsh_log.txt
+dsh_*.txt
+dsh_*.ppm
+fps_log.txt
+
+# mkxp-z 运行时会生成
+mkxp.json.bak
+*.bak
+
+# 系统文件
+Thumbs.db
+desktop.ini
+.DS_Store
